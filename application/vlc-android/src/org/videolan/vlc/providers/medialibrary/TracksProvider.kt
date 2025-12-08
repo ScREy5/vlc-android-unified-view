@@ -27,6 +27,7 @@ import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.*
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.tools.Settings
+import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.viewmodels.SortableModel
 
 class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: SortableModel) : MedialibraryProvider<MediaWrapper>(context, model) {
@@ -53,9 +54,24 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
         }
     }
 
-    override fun getAll(): Array<MediaWrapper> = this.pagedList.value?.toTypedArray() ?: medialibrary.getAudio(sort, desc, Settings.includeMissing, onlyFavorites)
+    private var cachedCombined: List<MediaWrapper>? = null
+    private var cachedFilter: String? = null
+    private var cachedSort: Int = sort
+    private var cachedDesc: Boolean = desc
+    private var cachedOnlyFavorites: Boolean = onlyFavorites
+
+    override fun getAll(): Array<MediaWrapper> = getCombinedMedia().toTypedArray()
 
     override fun getPage(loadSize: Int, startposition: Int) : Array<MediaWrapper> {
+        val list = if (parent != null) getScopedPage(loadSize, startposition) else getCombinedMedia(startposition + loadSize)
+            .drop(startposition)
+            .take(loadSize)
+            .toTypedArray()
+        model.viewModelScope.launch { completeHeaders(list, startposition) }
+        return list
+    }
+
+    private fun getScopedPage(loadSize: Int, startposition: Int): List<MediaWrapper> {
         val list = if (model.filterQuery == null) when(parent) {
             is Artist -> parent.getPagedTracks(sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
             is Album -> parent.getPagedTracks(sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
@@ -69,21 +85,75 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
             is Playlist -> parent.searchTracks(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
             else -> medialibrary.searchAudio(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
         }
-        model.viewModelScope.launch { completeHeaders(list, startposition) }
-        return list
+        return list.toList()
     }
 
-    override fun getTotalCount() = if (model.filterQuery == null) when (parent) {
-        is Album -> parent.realTracksCount
-        is Playlist -> parent.getRealTracksCount(Settings.includeMissing, onlyFavorites)
-        is Artist,
-        is Genre -> parent.tracksCount
-        else -> medialibrary.audioCount
-    } else when(parent) {
-        is Artist -> parent.searchTracksCount(model.filterQuery)
-        is Album -> parent.searchTracksCount(model.filterQuery)
-        is Genre -> parent.searchTracksCount(model.filterQuery)
-        is Playlist -> parent.searchTracksCount(model.filterQuery)
-        else ->medialibrary.getAudioCount(model.filterQuery)
+    private fun getCombinedMedia(limit: Int? = null): List<MediaWrapper> {
+        if (cachedCombined != null && cachedFilter == model.filterQuery && cachedSort == sort && cachedDesc == desc && cachedOnlyFavorites == onlyFavorites) {
+            if (limit == null) return cachedCombined!!
+            if (cachedCombined!!.size >= limit) return cachedCombined!!.take(limit)
+        }
+
+        val needsCache = limit == null
+        val effectiveLimit = limit ?: Int.MAX_VALUE
+
+        val audioCount = if (model.filterQuery == null) medialibrary.audioCount else medialibrary.getAudioCount(model.filterQuery)
+        val videoCount = if (model.filterQuery == null) medialibrary.videoCount else medialibrary.getVideoCount(model.filterQuery)
+
+        val audioLimit = minOf(audioCount, effectiveLimit)
+        val videoLimit = minOf(videoCount, effectiveLimit)
+
+        val audio = if (audioLimit > 0) {
+            if (model.filterQuery == null) medialibrary.getPagedAudio(sort, desc, Settings.includeMissing, onlyFavorites, audioLimit, 0).asList()
+            else medialibrary.searchAudio(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, audioLimit, 0).asList()
+        } else emptyList()
+
+        val video = if (videoLimit > 0) {
+            if (model.filterQuery == null) medialibrary.getPagedVideos(sort, desc, Settings.includeMissing, onlyFavorites, videoLimit, 0).asList()
+            else medialibrary.searchVideo(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, videoLimit, 0).asList()
+        } else emptyList()
+
+        val comparator = getComparator(sort)
+        val combined = (audio + video)
+            .sortedWith(if (desc) comparator.reversed() else comparator)
+            .let { if (limit == null) it else it.take(limit) }
+
+        if (needsCache) {
+            cachedCombined = combined
+            cachedFilter = model.filterQuery
+            cachedSort = sort
+            cachedDesc = desc
+            cachedOnlyFavorites = onlyFavorites
+        }
+        return combined
     }
+
+    private fun getComparator(sort: Int) = when (sort) {
+        Medialibrary.SORT_DURATION -> compareBy<MediaWrapper> { it.length }
+        Medialibrary.SORT_INSERTIONDATE -> compareBy<MediaWrapper> { it.insertionDate }
+        Medialibrary.SORT_LASTMODIFICATIONDATE -> compareBy<MediaWrapper> { it.lastModifiedTime }
+        Medialibrary.SORT_RELEASEDATE -> compareBy<MediaWrapper> { it.releaseDate }
+        Medialibrary.SORT_FILESIZE -> compareBy<MediaWrapper> { it.length }
+        Medialibrary.SORT_ARTIST -> compareBy<MediaWrapper> { it.artist }
+        Medialibrary.SORT_ALBUM -> compareBy<MediaWrapper> { it.album }
+        Medialibrary.SORT_FILENAME -> compareBy<MediaWrapper> { it.fileName }
+        Medialibrary.TrackNumber, Medialibrary.TrackId -> MediaComparators.BY_TRACK_NUMBER
+        else -> MediaComparators.ANDROID_AUTO
+    }
+
+    override fun getTotalCount() = if (parent != null) {
+        if (model.filterQuery == null) when (parent) {
+            is Album -> parent.realTracksCount
+            is Playlist -> parent.getRealTracksCount(Settings.includeMissing, onlyFavorites)
+            is Artist,
+            is Genre -> parent.tracksCount
+            else -> medialibrary.audioCount
+        } else when(parent) {
+            is Artist -> parent.searchTracksCount(model.filterQuery)
+            is Album -> parent.searchTracksCount(model.filterQuery)
+            is Genre -> parent.searchTracksCount(model.filterQuery)
+            is Playlist -> parent.searchTracksCount(model.filterQuery)
+            else -> medialibrary.getAudioCount(model.filterQuery)
+        }
+    } else (if (model.filterQuery == null) medialibrary.audioCount + medialibrary.videoCount else medialibrary.getAudioCount(model.filterQuery) + medialibrary.getVideoCount(model.filterQuery))
 }
