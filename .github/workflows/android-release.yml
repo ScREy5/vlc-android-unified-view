@@ -24,11 +24,13 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install platforms, tools, and NDK
-        run: yes | sdkmanager --channel=3 \
-          "platforms;android-35" \
-          "build-tools;35.0.0" \
-          "platform-tools" \
-          "ndk;27.1.12297006"
+        run: |
+          yes | sdkmanager --channel=3 \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools" \
+            "ndk;27.1.12297006"
+
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
