@@ -54,7 +54,10 @@ AndroidMediaLibrary::~AndroidMediaLibrary()
 medialibrary::InitializeResult
 AndroidMediaLibrary::initML()
 {
-    return p_ml->initialize(this);
+    auto result = p_ml->initialize(this);
+    if (result == medialibrary::InitializeResult::Success)
+        p_ml->forceParserRetry();
+    return result;
 }
 
 bool
