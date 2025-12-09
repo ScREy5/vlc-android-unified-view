@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  vlc-builder:
+    image: registry.videolan.org/vlc-debian-android:20250806120145
+    container_name: vlc-android-builder
+    user: root
+    working_dir: /workspace
+    environment:
+      - ANDROID_HOME=/sdk/android-sdk-linux
+      - ANDROID_SDK_ROOT=/sdk/android-sdk-linux
+    volumes:
+      - ../:/workspace
+      - gradle_cache:/root/.gradle
+    # Keep the container running so we can exec into it
+    command: tail -f /dev/null
+
+volumes:
+  gradle_cache:

@@ -270,6 +270,27 @@ val migration_36_37 = object:Migration(36, 37) {
     }
 }
 
+val migration_37_38 = object:Migration(37, 38) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("""
+            CREATE TABLE IF NOT EXISTS `video_audio_metadata_table` (
+                `mediaId` INTEGER PRIMARY KEY NOT NULL,
+                `mrl` TEXT NOT NULL,
+                `artist` TEXT NOT NULL DEFAULT '',
+                `album` TEXT NOT NULL DEFAULT '',
+                `albumArtist` TEXT NOT NULL DEFAULT '',
+                `genre` TEXT NOT NULL DEFAULT '',
+                `trackNumber` INTEGER NOT NULL DEFAULT 0,
+                `discNumber` INTEGER NOT NULL DEFAULT 0,
+                `artworkUrl` TEXT NOT NULL DEFAULT '',
+                `releaseYear` INTEGER NOT NULL DEFAULT 0,
+                `lastModified` INTEGER NOT NULL DEFAULT 0,
+                `parsedTimestamp` INTEGER NOT NULL DEFAULT 0
+            )
+        """.trimIndent())
+    }
+}
+
 @OptIn(DelicateCoroutinesApi::class)
 fun populateDB(context: Context) = GlobalScope.launch(Dispatchers.IO) {
     val uris = listOf(AndroidDevices.MediaFolders.EXTERNAL_PUBLIC_MOVIES_DIRECTORY_URI,

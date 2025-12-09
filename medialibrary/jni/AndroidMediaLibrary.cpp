@@ -34,6 +34,9 @@ AndroidMediaLibrary::AndroidMediaLibrary(JavaVM *vm, fields *ref_fields, jobject
     config.logger = std::make_shared<AndroidMediaLibraryLogger>();
     config.logLevel = medialibrary::LogLevel::Debug;
     config.deviceListers["file://"] = p_lister;
+    // Parse videos as audio to expose their audio metadata (album, artist, etc.)
+    // while still keeping them available as videos.
+    config.videoAsAudio = true;
     p_ml = NewMediaLibrary( dbPath, mlFolder, false, &config);
     pthread_once(&key_once, key_init);
     JNIEnv *env = getEnv();
@@ -51,7 +54,17 @@ AndroidMediaLibrary::~AndroidMediaLibrary()
 medialibrary::InitializeResult
 AndroidMediaLibrary::initML()
 {
-    return p_ml->initialize(this);
+    auto result = p_ml->initialize(this);
+    if (result == medialibrary::InitializeResult::Success && m_videoAsAudioRescanDone == false) {
+        /*
+         * Re-run a full scan so videos parsed as audio also populate music tables
+         * (albums/artists) while remaining videos. Parser retry alone only
+         * reprocesses failed items and doesn't inject the new audio metadata.
+         */
+        p_ml->forceRescan();
+        m_videoAsAudioRescanDone = true;
+    }
+    return result;
 }
 
 bool

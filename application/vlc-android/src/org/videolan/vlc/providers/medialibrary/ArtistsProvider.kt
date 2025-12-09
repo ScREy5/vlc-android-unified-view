@@ -22,23 +22,156 @@ package org.videolan.vlc.providers.medialibrary
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.Artist
+import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.tools.Settings
+import org.videolan.vlc.media.VideoArtist
+import org.videolan.vlc.mediadb.models.VideoAudioMetadata
+import org.videolan.vlc.repository.VideoAudioMetadataRepository
 import org.videolan.vlc.viewmodels.SortableModel
 
 class ArtistsProvider(context: Context, model: SortableModel, var showAll: Boolean) : MedialibraryProvider<Artist>(context, model) {
     override val isAudioPermDependant = true
 
-    override fun getAll() : Array<Artist> = medialibrary.getArtists(showAll, sort, desc, Settings.includeMissing, onlyFavorites)
+    // Repository for video audio metadata cache
+    private val metadataRepository by lazy { VideoAudioMetadataRepository.getInstance(context) }
+    
+    // Cache of combined artists (native + video)
+    private var cachedCombinedArtists: List<Artist>? = null
+    private var cachedFilter: String? = null
+    private var cachedSort: Int = sort
+    private var cachedDesc: Boolean = desc
+
+    /**
+     * Clear all caches to force reload on next query
+     */
+    fun clearCaches() {
+        cachedCombinedArtists = null
+    }
+
+    override fun getAll(): Array<Artist> = getCombinedArtists().toTypedArray()
 
     override fun getPage(loadSize: Int, startposition: Int): Array<Artist> {
-        val list = if (model.filterQuery == null) medialibrary.getPagedArtists(showAll, sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
-        else medialibrary.searchArtist(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
+        val list = getCombinedArtists()
+            .drop(startposition)
+            .take(loadSize)
+            .toTypedArray()
         model.viewModelScope.launch { completeHeaders(list, startposition) }
         return list
     }
 
-    override fun getTotalCount() = if (model.filterQuery == null) medialibrary.getArtistsCount(showAll)
-    else medialibrary.getArtistsCount(model.filterQuery)
+    override fun getTotalCount(): Int = getCombinedArtists().size
+
+    /**
+     * Get combined list of native medialibrary artists and video-based artists
+     */
+    private fun getCombinedArtists(): List<Artist> {
+        // Check cache validity
+        if (cachedCombinedArtists != null && 
+            cachedFilter == model.filterQuery && 
+            cachedSort == sort && 
+            cachedDesc == desc) {
+            return cachedCombinedArtists!!
+        }
+
+        // Get native artists from medialibrary
+        val nativeArtists = if (model.filterQuery == null) {
+            medialibrary.getArtists(showAll, sort, desc, Settings.includeMissing, onlyFavorites)
+        } else {
+            medialibrary.searchArtist(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, Int.MAX_VALUE, 0)
+        }.toList()
+
+        // Get video artists from metadata
+        val videoArtists = getVideoArtists()
+
+        // Merge: add video artists that don't exist in native artists
+        val nativeArtistNames = nativeArtists.map { it.title.lowercase() }.toSet()
+        val uniqueVideoArtists = videoArtists.filter { videoArtist ->
+            videoArtist.title.lowercase() !in nativeArtistNames
+        }
+
+        // Combine and sort
+        val combined = (nativeArtists + uniqueVideoArtists)
+            .sortedWith(getArtistComparator(sort, desc))
+
+        // Update cache
+        cachedCombinedArtists = combined
+        cachedFilter = model.filterQuery
+        cachedSort = sort
+        cachedDesc = desc
+
+        android.util.Log.d("ArtistsProvider", "Combined ${nativeArtists.size} native + ${uniqueVideoArtists.size} video artists = ${combined.size} total")
+        
+        return combined
+    }
+
+    /**
+     * Get artists derived from video audio metadata
+     */
+    private fun getVideoArtists(): List<VideoArtist> {
+        return runBlocking(Dispatchers.IO) {
+            // Get all video metadata with artist info
+            val allMetadata = metadataRepository.getAll()
+            
+            // Group by artist name (case-insensitive)
+            val artistGroups = allMetadata
+                .filter { it.artist.isNotBlank() }
+                .groupBy { it.artist.lowercase() }
+            
+            // Get all videos for matching
+            val allVideos = medialibrary.getVideos(Medialibrary.SORT_ALPHA, false, Settings.includeMissing, onlyFavorites)
+            val videosById = allVideos.associateBy { it.id }
+            
+            // Create VideoArtist for each group
+            val videoArtists = artistGroups.mapNotNull { (_, metadataList) ->
+                val artistName = metadataList.first().artist
+                
+                // Filter by search query if present
+                if (model.filterQuery != null && !artistName.lowercase().contains(model.filterQuery!!.lowercase())) {
+                    return@mapNotNull null
+                }
+                
+                // Get matching videos
+                val matchingVideos = metadataList.mapNotNull { metadata ->
+                    videosById[metadata.mediaId]
+                }
+                
+                if (matchingVideos.isEmpty()) {
+                    return@mapNotNull null
+                }
+                
+                // Count unique albums for this artist (considering both artist and albumArtist)
+                val albumsForThisArtist = allMetadata.filter { 
+                    (it.artist.equals(artistName, ignoreCase = true) || 
+                     it.albumArtist.equals(artistName, ignoreCase = true)) && 
+                    it.album.isNotBlank()
+                }.map { it.album.lowercase() }.distinct().count()
+                
+                // Get artwork from first video that has it
+                val artworkMrl = matchingVideos.firstOrNull { it.artworkMrl != null }?.artworkMrl
+                
+                val artist = VideoArtist(artistName, matchingVideos.size, albumsForThisArtist, artworkMrl)
+                artist.setVideos(matchingVideos)
+                artist
+            }
+            
+            android.util.Log.d("ArtistsProvider", "Created ${videoArtists.size} video artists from ${allMetadata.size} metadata entries")
+            videoArtists
+        }
+    }
+
+    /**
+     * Get comparator for sorting artists
+     */
+    private fun getArtistComparator(sort: Int, desc: Boolean): Comparator<Artist> {
+        val comparator: Comparator<Artist> = when (sort) {
+            Medialibrary.SORT_ALPHA -> compareBy { it.title.lowercase() }
+            else -> compareBy { it.title.lowercase() }
+        }
+        return if (desc) comparator.reversed() else comparator
+    }
 }
