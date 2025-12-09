@@ -1,4 +1,4 @@
-name: Android Debug APK
+name: Android Release APK
 
 on:
   workflow_dispatch:
@@ -7,8 +7,11 @@ on:
   pull_request:
     branches: [main, master]
 
+env:
+  KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+
 jobs:
-  build-debug:
+  build-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -36,17 +39,33 @@ jobs:
         with:
           gradle-version: 8.14.3
 
-      - name: Build debug APK
-        run: gradle :application:app:assembleDebug
-
-      - name: Verify debug APK signature
+      - name: Prepare release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          APK_PATH=$(ls application/app/build/outputs/apk/debug/*.apk | head -n 1)
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not set"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+
+      - name: Build signed release APK
+        env:
+          PASSWORD_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          gradle :application:app:assembleSignedRelease \
+            -PkeyStoreFile=$KEYSTORE_FILE \
+            -Pstorealias=${{ secrets.ANDROID_KEY_ALIAS }} \
+            -Pstorepwd=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+      - name: Verify release APK signature
+        run: |
+          APK_PATH=$(ls application/app/build/outputs/apk/signedRelease/*.apk | head -n 1)
           echo "Verifying $APK_PATH"
           apksigner verify --verbose "$APK_PATH"
 
-      - name: Upload debug artifact
+      - name: Upload signed release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vlc-android-debug-apk
-          path: application/app/build/outputs/apk/debug/*.apk
+          name: vlc-android-signed-release-apk
+          path: application/app/build/outputs/apk/signedRelease/*.apk
