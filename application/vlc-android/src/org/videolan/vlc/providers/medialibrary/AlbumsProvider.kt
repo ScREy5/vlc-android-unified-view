@@ -82,6 +82,14 @@ class AlbumsProvider(val parent : MediaLibraryItem?, context: Context, model: So
     override fun getTotalCount(): Int = getCombinedAlbums().size
 
     /**
+     * Check if the parent is a video-based artist (either VideoArtist instance or Artist with negative ID)
+     * Negative IDs indicate video-based virtual artists
+     */
+    private fun isVideoBasedArtist(): Boolean {
+        return parent is VideoArtist || (parent is Artist && parent.id < 0)
+    }
+
+    /**
      * Get combined list of native medialibrary albums and video-based albums
      */
     private fun getCombinedAlbums(): List<Album> {
@@ -93,7 +101,18 @@ class AlbumsProvider(val parent : MediaLibraryItem?, context: Context, model: So
             return cachedCombinedAlbums!!
         }
 
-        // Get native albums from medialibrary
+        // For video-based artists (detected by negative ID), only return video albums
+        if (isVideoBasedArtist()) {
+            val videoAlbums = getVideoAlbumsForArtist()
+            cachedCombinedAlbums = videoAlbums.sortedWith(getAlbumComparator(sort, desc))
+            cachedFilter = model.filterQuery
+            cachedSort = sort
+            cachedDesc = desc
+            android.util.Log.d("AlbumsProvider", "Video-based artist: returning ${videoAlbums.size} video albums")
+            return cachedCombinedAlbums!!
+        }
+
+        // Get native albums from medialibrary for regular artists
         val nativeAlbums = if (model.filterQuery == null) {
             when(parent) {
                 is Artist -> parent.getPagedAlbums(sort, desc, Settings.includeMissing, onlyFavorites, Int.MAX_VALUE, 0)
@@ -108,8 +127,8 @@ class AlbumsProvider(val parent : MediaLibraryItem?, context: Context, model: So
             }
         }.toList()
 
-        // Get video albums from metadata (only for non-scoped views or VideoArtist parents)
-        val videoAlbums = if (parent == null || parent is VideoArtist) {
+        // Get video albums from metadata (only for non-scoped views)
+        val videoAlbums = if (parent == null) {
             getVideoAlbums()
         } else {
             emptyList()
@@ -192,6 +211,75 @@ class AlbumsProvider(val parent : MediaLibraryItem?, context: Context, model: So
             }
             
             android.util.Log.d("AlbumsProvider", "Created ${videoAlbums.size} video albums from ${allMetadata.size} metadata entries")
+            videoAlbums
+        }
+    }
+
+    /**
+     * Get albums derived from video audio metadata for a specific video-based artist
+     * This method filters albums to only those belonging to the artist (by name matching)
+     */
+    private fun getVideoAlbumsForArtist(): List<VideoAlbum> {
+        val artistName = parent?.title ?: return emptyList()
+        
+        return runBlocking(Dispatchers.IO) {
+            // Get all video metadata with album info for this artist
+            val allMetadata = metadataRepository.getAll()
+            
+            // Filter metadata for this artist (case-insensitive match on artist or albumArtist)
+            val artistMetadata = allMetadata.filter { 
+                it.artist.equals(artistName, ignoreCase = true) || 
+                it.albumArtist.equals(artistName, ignoreCase = true)
+            }
+            
+            // Group by album name (case-insensitive)
+            val albumGroups = artistMetadata
+                .filter { it.album.isNotBlank() }
+                .groupBy { it.album.lowercase() }
+            
+            // Get all videos for matching
+            val allVideos = medialibrary.getVideos(Medialibrary.SORT_ALPHA, false, Settings.includeMissing, onlyFavorites)
+            val videosById = allVideos.associateBy { it.id }
+            
+            // Create VideoAlbum for each group
+            val videoAlbums = albumGroups.mapNotNull { (_, metadataList) ->
+                val albumName = metadataList.first().album
+                val albumArtistName = metadataList.firstOrNull { it.albumArtist.isNotBlank() }?.albumArtist
+                    ?: metadataList.firstOrNull { it.artist.isNotBlank() }?.artist
+                    ?: ""
+                
+                // Filter by search query if present
+                if (model.filterQuery != null && !albumName.lowercase().contains(model.filterQuery!!.lowercase())) {
+                    return@mapNotNull null
+                }
+                
+                // Get matching videos
+                val matchingVideos = metadataList.mapNotNull { metadata ->
+                    videosById[metadata.mediaId]
+                }
+                
+                if (matchingVideos.isEmpty()) {
+                    return@mapNotNull null
+                }
+                
+                // Get artwork from first video that has it
+                val artworkMrl = matchingVideos.firstOrNull { it.artworkMrl != null }?.artworkMrl
+                
+                // Get release year (use the most common one)
+                val releaseYear = metadataList.mapNotNull { if (it.releaseYear > 0) it.releaseYear else null }
+                    .groupingBy { it }
+                    .eachCount()
+                    .maxByOrNull { it.value }?.key ?: 0
+                
+                // Calculate total duration
+                val totalDuration = matchingVideos.sumOf { it.length }
+                
+                val album = VideoAlbum(albumName, albumArtistName, matchingVideos.size, releaseYear, artworkMrl, totalDuration)
+                album.setVideos(matchingVideos)
+                album
+            }
+            
+            android.util.Log.d("AlbumsProvider", "Created ${videoAlbums.size} video albums for artist '$artistName' from ${artistMetadata.size} metadata entries")
             videoAlbums
         }
     }

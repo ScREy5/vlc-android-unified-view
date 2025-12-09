@@ -39,14 +39,28 @@ import java.util.List;
 public class VideoArtist extends Artist {
 
     private List<MediaWrapper> videos = new ArrayList<>();
+    private int computedAlbumsCount = 0;
 
     public VideoArtist(String name, int videoCount, String artworkMrl) {
         // Use negative ID based on name hash to avoid collisions with real artists
         super(-Math.abs(name.hashCode()), name, "", artworkMrl, "", 0, 0, videoCount, false);
     }
 
+    public VideoArtist(String name, int videoCount, int albumsCount, String artworkMrl) {
+        // Use negative ID based on name hash to avoid collisions with real artists
+        super(-Math.abs(name.hashCode()), name, "", artworkMrl, "", albumsCount, 0, videoCount, false);
+        this.computedAlbumsCount = albumsCount;
+    }
+
     public VideoArtist(Parcel in) {
         super(in);
+        this.computedAlbumsCount = in.readInt();
+    }
+
+    @Override
+    public void writeToParcel(Parcel parcel, int i) {
+        super.writeToParcel(parcel, i);
+        parcel.writeInt(computedAlbumsCount);
     }
 
     /**
@@ -61,6 +75,18 @@ public class VideoArtist extends Artist {
      */
     public List<MediaWrapper> getVideos() {
         return videos;
+    }
+    
+    /**
+     * Set the computed albums count for this artist
+     */
+    public void setAlbumsCount(int count) {
+        this.computedAlbumsCount = count;
+    }
+
+    @Override
+    public int getAlbumsCount() {
+        return computedAlbumsCount;
     }
 
     @Override
@@ -130,11 +156,6 @@ public class VideoArtist extends Artist {
             }
         }
         return count;
-    }
-
-    @Override
-    public int getAlbumsCount() {
-        return 0;
     }
 
     @Override

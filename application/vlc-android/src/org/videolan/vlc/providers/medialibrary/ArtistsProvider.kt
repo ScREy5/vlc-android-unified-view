@@ -144,10 +144,17 @@ class ArtistsProvider(context: Context, model: SortableModel, var showAll: Boole
                     return@mapNotNull null
                 }
                 
+                // Count unique albums for this artist (considering both artist and albumArtist)
+                val albumsForThisArtist = allMetadata.filter { 
+                    (it.artist.equals(artistName, ignoreCase = true) || 
+                     it.albumArtist.equals(artistName, ignoreCase = true)) && 
+                    it.album.isNotBlank()
+                }.map { it.album.lowercase() }.distinct().count()
+                
                 // Get artwork from first video that has it
                 val artworkMrl = matchingVideos.firstOrNull { it.artworkMrl != null }?.artworkMrl
                 
-                val artist = VideoArtist(artistName, matchingVideos.size, artworkMrl)
+                val artist = VideoArtist(artistName, matchingVideos.size, albumsForThisArtist, artworkMrl)
                 artist.setVideos(matchingVideos)
                 artist
             }
