@@ -34,6 +34,9 @@ AndroidMediaLibrary::AndroidMediaLibrary(JavaVM *vm, fields *ref_fields, jobject
     config.logger = std::make_shared<AndroidMediaLibraryLogger>();
     config.logLevel = medialibrary::LogLevel::Debug;
     config.deviceListers["file://"] = p_lister;
+    // Parse videos as audio to expose their audio metadata (album, artist, etc.)
+    // while still keeping them available as videos.
+    config.videoAsAudio = true;
     p_ml = NewMediaLibrary( dbPath, mlFolder, false, &config);
     pthread_once(&key_once, key_init);
     JNIEnv *env = getEnv();
