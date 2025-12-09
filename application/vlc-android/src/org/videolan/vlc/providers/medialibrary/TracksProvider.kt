@@ -29,6 +29,7 @@ import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.tools.Settings
 import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.viewmodels.SortableModel
+import java.util.Comparator
 
 class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: SortableModel) : MedialibraryProvider<MediaWrapper>(context, model) {
 
@@ -63,7 +64,7 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
     override fun getAll(): Array<MediaWrapper> = getCombinedMedia().toTypedArray()
 
     override fun getPage(loadSize: Int, startposition: Int) : Array<MediaWrapper> {
-        val list = if (parent != null) getScopedPage(loadSize, startposition) else getCombinedMedia(startposition + loadSize)
+        val list = if (parent != null) getScopedPage(loadSize, startposition).toTypedArray() else getCombinedMedia(startposition + loadSize)
             .drop(startposition)
             .take(loadSize)
             .toTypedArray()
@@ -128,17 +129,17 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
         return combined
     }
 
-    private fun getComparator(sort: Int) = when (sort) {
-        Medialibrary.SORT_DURATION -> compareBy<MediaWrapper> { it.length }
-        Medialibrary.SORT_INSERTIONDATE -> compareBy<MediaWrapper> { it.insertionDate }
-        Medialibrary.SORT_LASTMODIFICATIONDATE -> compareBy<MediaWrapper> { it.lastModifiedTime }
-        Medialibrary.SORT_RELEASEDATE -> compareBy<MediaWrapper> { it.releaseDate }
-        Medialibrary.SORT_FILESIZE -> compareBy<MediaWrapper> { it.length }
-        Medialibrary.SORT_ARTIST -> compareBy<MediaWrapper> { it.artist }
-        Medialibrary.SORT_ALBUM -> compareBy<MediaWrapper> { it.album }
-        Medialibrary.SORT_FILENAME -> compareBy<MediaWrapper> { it.fileName }
+    private fun getComparator(sort: Int): Comparator<MediaWrapper> = when (sort) {
+        Medialibrary.SORT_DURATION -> compareBy { it.length }
+        Medialibrary.SORT_INSERTIONDATE -> compareBy { it.insertionDate }
+        Medialibrary.SORT_LASTMODIFICATIONDATE -> compareBy { it.lastModified }
+        Medialibrary.SORT_RELEASEDATE -> compareBy { it.releaseYear }
+        Medialibrary.SORT_FILESIZE -> compareBy { it.length }
+        Medialibrary.SORT_ARTIST -> compareBy { it.artist?.title.orEmpty() }
+        Medialibrary.SORT_ALBUM -> compareBy { it.album?.title.orEmpty() }
+        Medialibrary.SORT_FILENAME -> compareBy { it.fileName }
         Medialibrary.TrackNumber, Medialibrary.TrackId -> MediaComparators.BY_TRACK_NUMBER
-        else -> MediaComparators.ANDROID_AUTO
+        else -> Comparator { first, second -> MediaComparators.ANDROID_AUTO.compare(first, second) }
     }
 
     override fun getTotalCount() = if (parent != null) {
