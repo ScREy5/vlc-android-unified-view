@@ -47,7 +47,7 @@ The output is generated under `application/app/build/outputs/bundle/release/`.
 ## Build a release APK in CI
 The repository ships with a reusable GitHub Action workflow in `.github/workflows/android-release.yml`. It:
 - checks out the sources
-- installs Android SDK platform 36, build tools 35.0.0, platform tools, and NDK 27.1.12297006 (using the preview channel when required)
+- installs Android SDK platform 35, build tools 35.0.0, platform tools, and NDK 27.1.12297006 (using the preview channel when required)
 - runs Gradle to produce `:application:assembleRelease`
 - uploads the resulting APKs from `application/app/build/outputs/apk/release/` as workflow artifacts
 
