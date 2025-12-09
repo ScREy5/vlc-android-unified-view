@@ -41,6 +41,12 @@ Thumbs.db
 
 # Signage keys
 *.keystore
+keystore-base64.txt
+my-release-key.keystore
+
+# Documentation/working files
+feedback.md
+CODEBASE_OVERVIEW.md
 
 # Eclipse
 #.classpath

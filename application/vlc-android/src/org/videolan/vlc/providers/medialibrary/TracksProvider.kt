@@ -22,12 +22,19 @@ package org.videolan.vlc.providers.medialibrary
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.*
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.tools.Settings
 import org.videolan.vlc.gui.helpers.MediaComparators
+import org.videolan.vlc.mediadb.models.VideoAudioMetadata
+import org.videolan.vlc.repository.VideoAudioMetadataRepository
+import org.videolan.vlc.util.VideoMetadataExtractor
+import org.videolan.vlc.util.getEffectiveAlbum
+import org.videolan.vlc.util.getEffectiveArtist
 import org.videolan.vlc.viewmodels.SortableModel
 import java.util.Comparator
 
@@ -43,6 +50,12 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
     override fun canSortByFileNameName() = parent !is Playlist
     override fun canSortByTrackId() = parent is Album
     override val isAudioPermDependant = true
+
+    // Repository for video audio metadata cache
+    private val metadataRepository by lazy { VideoAudioMetadataRepository.getInstance(context) }
+    
+    // Cache of video audio metadata indexed by media ID
+    private var videoMetadataCache: Map<Long, VideoAudioMetadata> = emptyMap()
 
     init {
         sort = Settings.getInstance(context).getInt(sortKey, Medialibrary.SORT_DEFAULT)
@@ -114,6 +127,13 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
             else medialibrary.searchVideo(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, videoLimit, 0).asList()
         } else emptyList()
 
+        // Load cached metadata for videos
+        if (video.isNotEmpty()) {
+            loadVideoMetadataCache(video)
+            // Trigger background extraction for videos without cached metadata
+            triggerMetadataExtraction(video)
+        }
+
         val comparator = getComparator(sort)
         val combined = (audio + video)
             .sortedWith(if (desc) comparator.reversed() else comparator)
@@ -129,14 +149,52 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
         return combined
     }
 
+    /**
+     * Load cached video audio metadata for the given videos
+     */
+    private fun loadVideoMetadataCache(videos: List<MediaWrapper>) {
+        val videoIds = videos.map { it.id }
+        videoMetadataCache = runBlocking(Dispatchers.IO) {
+            metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
+        }
+    }
+
+    /**
+     * Trigger background extraction for videos that don't have cached metadata
+     */
+    private fun triggerMetadataExtraction(videos: List<MediaWrapper>) {
+        val videosWithoutMetadata = videos.filter { video ->
+            val cached = videoMetadataCache[video.id]
+            cached == null || cached.lastModified < video.lastModified
+        }
+        
+        if (videosWithoutMetadata.isNotEmpty()) {
+            model.viewModelScope.launch(Dispatchers.IO) {
+                VideoMetadataExtractor.extractAndCacheMetadata(context, videosWithoutMetadata, metadataRepository)
+                // Reload cache after extraction
+                val videoIds = videos.map { it.id }
+                videoMetadataCache = metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
+                // Invalidate combined cache to trigger re-sort with new metadata
+                cachedCombined = null
+            }
+        }
+    }
+
+    /**
+     * Get cached metadata for a media item (returns null for audio or uncached videos)
+     */
+    private fun getVideoMetadata(media: MediaWrapper): VideoAudioMetadata? {
+        return if (media.type == MediaWrapper.TYPE_VIDEO) videoMetadataCache[media.id] else null
+    }
+
     private fun getComparator(sort: Int): Comparator<MediaWrapper> = when (sort) {
         Medialibrary.SORT_DURATION -> compareBy { it.length }
         Medialibrary.SORT_INSERTIONDATE -> compareBy { it.insertionDate }
         Medialibrary.SORT_LASTMODIFICATIONDATE -> compareBy { it.lastModified }
         Medialibrary.SORT_RELEASEDATE -> compareBy { it.releaseYear }
         Medialibrary.SORT_FILESIZE -> compareBy { it.length }
-        Medialibrary.SORT_ARTIST -> compareBy { it.artist?.title.orEmpty() }
-        Medialibrary.SORT_ALBUM -> compareBy { it.album?.title.orEmpty() }
+        Medialibrary.SORT_ARTIST -> compareBy { it.getEffectiveArtist(getVideoMetadata(it)) }
+        Medialibrary.SORT_ALBUM -> compareBy { it.getEffectiveAlbum(getVideoMetadata(it)) }
         Medialibrary.SORT_FILENAME -> compareBy { it.fileName }
         Medialibrary.TrackNumber, Medialibrary.TrackId -> MediaComparators.BY_TRACK_NUMBER
         else -> Comparator { first, second -> MediaComparators.ANDROID_AUTO.compare(first, second) }
