@@ -61,21 +61,25 @@ object VideoMetadataExtractor {
             val libVLC = VLCInstance.getInstance(context)
             val media = mediaFactory.getFromUri(libVLC, mediaWrapper.uri)
             
-            // Parse the media to extract metadata
-            media.parse(IMedia.Parse.ParseLocal or IMedia.Parse.ParseNetwork)
+            // Use FetchLocal flag which is synchronous for local files
+            val parseFlag = IMedia.Parse.FetchLocal or IMedia.Parse.ParseLocal
+            media.parse(parseFlag)
             
-            // Wait for parsing to complete (with timeout)
+            // Wait for parsing to complete (with timeout) - max 10 seconds
             var attempts = 0
-            while (!media.isParsed && attempts < 50) {
+            val maxAttempts = 100
+            while (!media.isParsed && attempts < maxAttempts) {
                 kotlinx.coroutines.delay(100)
                 attempts++
             }
             
             if (!media.isParsed) {
-                Log.w(TAG, "Media parsing timed out for: ${mediaWrapper.uri}")
+                Log.w(TAG, "Media parsing timed out for: ${mediaWrapper.uri} after $attempts attempts")
                 media.release()
                 return@withContext null
             }
+            
+            Log.d(TAG, "Media parsed successfully for: ${mediaWrapper.uri} after $attempts attempts")
             
             // Extract metadata from the parsed media
             val artist = media.getMeta(IMedia.Meta.Artist) ?: ""

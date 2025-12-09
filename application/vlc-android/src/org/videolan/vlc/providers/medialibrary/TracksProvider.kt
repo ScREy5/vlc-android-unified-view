@@ -158,7 +158,9 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
     private fun loadVideoMetadataCache(videos: List<MediaWrapper>) {
         val videoIds = videos.map { it.id }
         videoMetadataCache = runBlocking(Dispatchers.IO) {
-            metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
+            val metadata = metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
+            android.util.Log.d("TracksProvider", "Loaded ${metadata.size} cached metadata entries for ${videos.size} videos")
+            metadata
         }
     }
 
@@ -172,13 +174,21 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
         }
         
         if (videosWithoutMetadata.isNotEmpty()) {
+            android.util.Log.d("TracksProvider", "Triggering metadata extraction for ${videosWithoutMetadata.size} videos")
             model.viewModelScope.launch(Dispatchers.IO) {
-                VideoMetadataExtractor.extractAndCacheMetadata(context, videosWithoutMetadata, metadataRepository)
-                // Reload cache after extraction
-                val videoIds = videos.map { it.id }
-                videoMetadataCache = metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
-                // Invalidate combined cache to trigger re-sort with new metadata
-                cachedCombined = null
+                val extracted = VideoMetadataExtractor.extractAndCacheMetadata(context, videosWithoutMetadata, metadataRepository)
+                android.util.Log.d("TracksProvider", "Extracted metadata for $extracted videos")
+                if (extracted > 0) {
+                    // Reload cache after extraction
+                    val videoIds = videos.map { it.id }
+                    videoMetadataCache = metadataRepository.getByMediaIds(videoIds).associateBy { it.mediaId }
+                    // Invalidate combined cache and trigger refresh
+                    cachedCombined = null
+                    // Trigger UI refresh on the main thread
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        refresh()
+                    }
+                }
             }
         }
     }
@@ -195,15 +205,18 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
      * This shows artist · album format like audio files instead of duration.
      */
     private fun applyMetadataToVideoDescriptions(videos: List<MediaWrapper>) {
+        var appliedCount = 0
         for (video in videos) {
             val metadata = videoMetadataCache[video.id]
             if (metadata != null) {
                 val description = video.buildAudioDescription(metadata)
                 if (description.isNotEmpty()) {
                     video.description = description
+                    appliedCount++
                 }
             }
         }
+        android.util.Log.d("TracksProvider", "Applied metadata descriptions to $appliedCount of ${videos.size} videos")
     }
 
     private fun getComparator(sort: Int): Comparator<MediaWrapper> = when (sort) {
