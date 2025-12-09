@@ -7,12 +7,12 @@ on:
   pull_request:
     branches: [main, master]
 
-env:
-  KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
-
 jobs:
   build-release:
     runs-on: ubuntu-latest
+
+    env:
+      KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -51,12 +51,13 @@ jobs:
 
       - name: Build signed release APK
         env:
-          PASSWORD_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           gradle :application:app:assembleSignedRelease \
-            -PkeyStoreFile=$KEYSTORE_FILE \
-            -Pstorealias=${{ secrets.ANDROID_KEY_ALIAS }} \
-            -Pstorepwd=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+            -PkeyStoreFile="$KEYSTORE_FILE" \
+            -Pstorealias="$ANDROID_KEY_ALIAS" \
+            -Pstorepwd="$ANDROID_KEYSTORE_PASSWORD"
 
       - name: Verify release APK signature
         run: |
