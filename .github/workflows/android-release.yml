@@ -1,4 +1,4 @@
-name: Android Release APK
+name: Android Debug APK
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
     branches: [main, master]
 
 jobs:
-  build-release:
+  build-debug:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -36,11 +36,17 @@ jobs:
         with:
           gradle-version: 8.14.3
 
-      - name: Build release APK
-        run: gradle :application:app:assembleRelease
+      - name: Build debug APK
+        run: gradle :application:app:assembleDebug
 
-      - name: Upload release artifact
+      - name: Verify debug APK signature
+        run: |
+          APK_PATH=$(ls application/app/build/outputs/apk/debug/*.apk | head -n 1)
+          echo "Verifying $APK_PATH"
+          apksigner verify --verbose "$APK_PATH"
+
+      - name: Upload debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vlc-android-release-apk
-          path: application/app/build/outputs/apk/release/*.apk
+          name: vlc-android-debug-apk
+          path: application/app/build/outputs/apk/debug/*.apk
