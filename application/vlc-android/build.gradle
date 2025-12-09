@@ -149,13 +149,12 @@ task generateSources(type: Jar) {
 dependencies {
     devApi project(':libvlcjni:libvlc')
     devApi project(':medialibrary')
-    // Use local medialibrary project for debug builds to include VideoArtist/VideoAlbum classes
     debugApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    debugApi project(':medialibrary')
+    debugApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
     releaseApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    releaseApi project(':medialibrary')
+    releaseApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
     signedReleaseApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    signedReleaseApi project(':medialibrary')
+    signedReleaseApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
     api project(':application:tools')
     api project(':application:resources')
     api project(':application:mediadb')

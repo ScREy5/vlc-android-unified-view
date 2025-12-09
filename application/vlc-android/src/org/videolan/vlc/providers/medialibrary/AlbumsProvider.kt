@@ -30,8 +30,9 @@ import org.videolan.medialibrary.interfaces.media.Album
 import org.videolan.medialibrary.interfaces.media.Artist
 import org.videolan.medialibrary.interfaces.media.Genre
 import org.videolan.medialibrary.media.MediaLibraryItem
-import org.videolan.medialibrary.media.VideoAlbum
 import org.videolan.tools.Settings
+import org.videolan.vlc.media.VideoAlbum
+import org.videolan.vlc.media.VideoArtist
 import org.videolan.vlc.mediadb.models.VideoAudioMetadata
 import org.videolan.vlc.repository.VideoAudioMetadataRepository
 import org.videolan.vlc.viewmodels.SortableModel
@@ -108,7 +109,7 @@ class AlbumsProvider(val parent : MediaLibraryItem?, context: Context, model: So
         }.toList()
 
         // Get video albums from metadata (only for non-scoped views or VideoArtist parents)
-        val videoAlbums = if (parent == null || parent is org.videolan.medialibrary.media.VideoArtist) {
+        val videoAlbums = if (parent == null || parent is VideoArtist) {
             getVideoAlbums()
         } else {
             emptyList()

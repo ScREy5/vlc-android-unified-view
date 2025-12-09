@@ -28,9 +28,9 @@ import kotlinx.coroutines.runBlocking
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.*
 import org.videolan.medialibrary.media.MediaLibraryItem
-import org.videolan.medialibrary.media.VideoAlbum
-import org.videolan.medialibrary.media.VideoArtist
 import org.videolan.tools.Settings
+import org.videolan.vlc.media.VideoAlbum
+import org.videolan.vlc.media.VideoArtist
 import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.mediadb.models.VideoAudioMetadata
 import org.videolan.vlc.repository.VideoAudioMetadataRepository

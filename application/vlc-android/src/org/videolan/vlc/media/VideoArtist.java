@@ -18,13 +18,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
-package org.videolan.medialibrary.media;
+package org.videolan.vlc.media;
 
 import android.os.Parcel;
 
-import org.videolan.medialibrary.interfaces.media.Album;
 import org.videolan.medialibrary.interfaces.media.Artist;
 import org.videolan.medialibrary.interfaces.media.MediaWrapper;
+import org.videolan.medialibrary.interfaces.media.Album;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,16 +42,7 @@ public class VideoArtist extends Artist {
 
     public VideoArtist(String name, int videoCount, String artworkMrl) {
         // Use negative ID based on name hash to avoid collisions with real artists
-        super(-(name.hashCode() & 0x7FFFFFFF),
-              name,
-              "", // shortBio
-              artworkMrl,
-              "", // musicBrainzId
-              0,  // albumsCount - we don't track video albums separately
-              videoCount, // tracksCount
-              videoCount, // presentTracksCount
-              false // isFavorite
-        );
+        super(-Math.abs(name.hashCode()), name, "", artworkMrl, "", 0, 0, videoCount, false);
     }
 
     public VideoArtist(Parcel in) {
@@ -74,7 +65,7 @@ public class VideoArtist extends Artist {
 
     @Override
     public Album[] getAlbums(int sort, boolean desc, boolean includeMissing, boolean onlyFavorites) {
-        // Videos don't have proper album associations, return empty
+        // Videos don't have real albums in the medialibrary sense
         return new Album[0];
     }
 
@@ -91,6 +82,20 @@ public class VideoArtist extends Artist {
     @Override
     public int searchAlbumsCount(String query) {
         return 0;
+    }
+
+    @Override
+    public MediaWrapper[] getTracks(int sort, boolean desc, boolean includeMissing, boolean onlyFavorites) {
+        return videos.toArray(new MediaWrapper[0]);
+    }
+
+    @Override
+    public MediaWrapper[] getPagedTracks(int sort, boolean desc, boolean includeMissing, boolean onlyFavorites, int nbItems, int offset) {
+        if (offset >= videos.size()) {
+            return new MediaWrapper[0];
+        }
+        int end = Math.min(offset + nbItems, videos.size());
+        return videos.subList(offset, end).toArray(new MediaWrapper[0]);
     }
 
     @Override
@@ -128,17 +133,13 @@ public class VideoArtist extends Artist {
     }
 
     @Override
-    public MediaWrapper[] getTracks(int sort, boolean desc, boolean includeMissing, boolean onlyFavorites) {
-        return videos.toArray(new MediaWrapper[0]);
+    public int getAlbumsCount() {
+        return 0;
     }
 
     @Override
-    public MediaWrapper[] getPagedTracks(int sort, boolean desc, boolean includeMissing, boolean onlyFavorites, int nbItems, int offset) {
-        if (offset >= videos.size()) {
-            return new MediaWrapper[0];
-        }
-        int end = Math.min(offset + nbItems, videos.size());
-        return videos.subList(offset, end).toArray(new MediaWrapper[0]);
+    public int getTracksCount() {
+        return videos.size();
     }
 
     @Override
