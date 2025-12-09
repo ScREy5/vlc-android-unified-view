@@ -61,8 +61,6 @@ captures/
 *.includes
 
 #gradle
-gradlew.bat
-gradlew
 gradle*/
 .gradle/
 build/
