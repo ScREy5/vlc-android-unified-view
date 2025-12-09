@@ -101,7 +101,7 @@ fun MediaWrapper.getEffectiveDiscNumber(cachedMetadata: VideoAudioMetadata?): In
  */
 fun MediaWrapper.getEffectiveAlbumArtist(cachedMetadata: VideoAudioMetadata?): String {
     return when {
-        type == MediaWrapper.TYPE_AUDIO -> albumArtist.orEmpty()
+        type == MediaWrapper.TYPE_AUDIO -> albumArtistName.orEmpty()
         cachedMetadata != null && cachedMetadata.albumArtist.isNotEmpty() -> cachedMetadata.albumArtist
         else -> ""
     }

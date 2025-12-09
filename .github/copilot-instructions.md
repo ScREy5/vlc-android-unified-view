@@ -79,6 +79,7 @@ feature/
 - Unit tests: `*/src/test/`
 - Instrumented tests: `*/src/androidTest/`
 - Run with: `gradle test` or `gradle connectedAndroidTest`
+- **Note:** Testing and building require a proper environment (Gradle 8.14.3, JDK 17, Android SDK). Use the provided Docker environment in `docker-build/` if local setup is missing.
 
 ## Files to Avoid Committing
 - `*.keystore` - Signing keys
