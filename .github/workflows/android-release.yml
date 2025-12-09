@@ -10,7 +10,17 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+
     steps:
+      - name: Fail fast if signing secrets are missing
+        run: |
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] || \
+             [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] || \
+             [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ]; then
+            echo "One or more signing secrets (ANDROID_KEYSTORE_BASE64 / ANDROID_KEY_ALIAS / ANDROID_KEYSTORE_PASSWORD) are missing."
+            exit 1
+          fi
+
       - name: Checkout sources
         uses: actions/checkout@v4
 
@@ -36,11 +46,46 @@ jobs:
         with:
           gradle-version: 8.14.3
 
-      - name: Build release APK
-        run: gradle :application:app:assembleRelease
+      - name: Prepare release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          echo "Keystore written to $KEYSTORE_FILE"
 
-      - name: Upload release artifact
+      - name: Build signed release APK
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
+          # If this task name is wrong for your project, this step will fail.
+          gradle :application:app:assembleSignedRelease \
+            -PkeyStoreFile="$KEYSTORE_FILE" \
+            -Pstorealias="$ANDROID_KEY_ALIAS" \
+            -Pstorepwd="$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Verify release APK signature (best-effort)
+        run: |
+          APK_PATH=$(ls application/app/build/outputs/apk/signedRelease/*.apk | head -n 1)
+          echo "Verifying $APK_PATH"
+
+          APKSIGNER=""
+          if [ -n "$ANDROID_SDK_ROOT" ] && [ -x "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" ]; then
+            APKSIGNER="$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner"
+          elif [ -n "$ANDROID_HOME" ] && [ -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          fi
+
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose "$APK_PATH"
+          else
+            echo "WARNING: apksigner not found in build-tools/35.0.0, skipping verification step"
+          fi
+
+      - name: Upload signed release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vlc-android-release-apk
-          path: application/app/build/outputs/apk/release/*.apk
+          name: vlc-android-signed-release-apk
+          path: application/app/build/outputs/apk/signedRelease/*.apk
