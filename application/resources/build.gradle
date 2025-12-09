@@ -71,11 +71,12 @@ dependencies {
     devApi project(':libvlcjni:libvlc')
     devApi project(':medialibrary')
     debugApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    debugApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
+    // Use local medialibrary project for debug builds to include VideoArtist/VideoAlbum classes
+    debugApi project(':medialibrary')
     releaseApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    releaseApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
+    releaseApi project(':medialibrary')
     vlcBundleApi "org.videolan.android:libvlc-all:$rootProject.ext.libvlcVersion"
-    vlcBundleApi "org.videolan.android:medialibrary-all:$rootProject.ext.medialibraryVersion"
+    vlcBundleApi project(':medialibrary')
 
     api "com.google.android.material:material:$rootProject.ext.androidxMaterialVersion"
 

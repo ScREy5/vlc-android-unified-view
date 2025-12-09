@@ -28,6 +28,8 @@ import kotlinx.coroutines.runBlocking
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.*
 import org.videolan.medialibrary.media.MediaLibraryItem
+import org.videolan.medialibrary.media.VideoAlbum
+import org.videolan.medialibrary.media.VideoArtist
 import org.videolan.tools.Settings
 import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.mediadb.models.VideoAudioMetadata
@@ -97,6 +99,38 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
      * Get all tracks for a scoped (parent) query, including matching videos for Artist/Album
      */
     private fun getAllScoped(): List<MediaWrapper> {
+        // For VideoArtist and VideoAlbum (or artists/albums with negative IDs after unparceling),
+        // we need to load videos by matching metadata
+        val isVideoOnlyArtist = parent is VideoArtist || (parent is Artist && parent.id < 0)
+        val isVideoOnlyAlbum = parent is VideoAlbum || (parent is Album && parent.id < 0)
+        
+        if (isVideoOnlyArtist || isVideoOnlyAlbum) {
+            // Get stored videos if this is a VideoArtist/VideoAlbum instance
+            val storedVideos = when (parent) {
+                is VideoArtist -> parent.getVideos()
+                is VideoAlbum -> parent.getVideos()
+                else -> emptyList()
+            }
+            
+            // If we have stored videos, use them; otherwise load by name matching
+            val videos = if (storedVideos.isNotEmpty()) {
+                storedVideos
+            } else {
+                // Parent was parceled and lost its videos, reload by name matching
+                getVideosMatchingParent()
+            }
+            
+            // Apply metadata descriptions to videos
+            if (videos.isNotEmpty()) {
+                runBlocking(Dispatchers.IO) {
+                    val metadata = metadataRepository.getByMediaIds(videos.map { it.id })
+                    videoMetadataCache = metadata.associateBy { it.mediaId }
+                    applyMetadataToVideoDescriptions(videos)
+                }
+            }
+            return videos.sortedWith(if (desc) getComparator(sort).reversed() else getComparator(sort))
+        }
+        
         val nativeTracks = when(parent) {
             is Artist -> parent.getTracks(sort, desc, Settings.includeMissing, onlyFavorites)
             is Album -> parent.getTracks(sort, desc, Settings.includeMissing, onlyFavorites)
@@ -105,7 +139,7 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
             else -> medialibrary.getAudio(sort, desc, Settings.includeMissing, onlyFavorites)
         }.toMutableList()
         
-        // For Artist and Album views, include videos with matching metadata
+        // For native Artist and Album views, include videos with matching metadata
         if (parent is Artist || parent is Album) {
             val matchingVideos = getVideosMatchingParent()
             if (matchingVideos.isNotEmpty()) {
@@ -127,6 +161,48 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
     }
 
     private fun getScopedPage(loadSize: Int, startposition: Int): List<MediaWrapper> {
+        // For VideoArtist and VideoAlbum (or artists/albums with negative IDs after unparceling)
+        val isVideoOnlyArtist = parent is VideoArtist || (parent is Artist && parent.id < 0)
+        val isVideoOnlyAlbum = parent is VideoAlbum || (parent is Album && parent.id < 0)
+        
+        if (isVideoOnlyArtist || isVideoOnlyAlbum) {
+            // Get stored videos if this is a VideoArtist/VideoAlbum instance
+            val storedVideos = when (parent) {
+                is VideoArtist -> parent.getVideos()
+                is VideoAlbum -> parent.getVideos()
+                else -> emptyList()
+            }
+            
+            // If we have stored videos, use them; otherwise load by name matching
+            val videos = if (storedVideos.isNotEmpty()) {
+                storedVideos
+            } else {
+                // Parent was parceled and lost its videos, reload by name matching
+                getVideosMatchingParent()
+            }
+            
+            // Apply metadata descriptions to videos
+            if (videos.isNotEmpty() && videoMetadataCache.isEmpty()) {
+                runBlocking(Dispatchers.IO) {
+                    val metadata = metadataRepository.getByMediaIds(videos.map { it.id })
+                    videoMetadataCache = metadata.associateBy { it.mediaId }
+                    applyMetadataToVideoDescriptions(videos)
+                }
+            }
+            
+            // Filter by search query if present
+            val filteredVideos = if (model.filterQuery != null) {
+                val query = model.filterQuery!!.lowercase()
+                videos.filter { it.title.lowercase().contains(query) }
+            } else videos
+            
+            // Sort and paginate
+            return filteredVideos
+                .sortedWith(if (desc) getComparator(sort).reversed() else getComparator(sort))
+                .drop(startposition)
+                .take(loadSize)
+        }
+        
         val nativeTracksArray = if (model.filterQuery == null) when(parent) {
             is Artist -> parent.getPagedTracks(sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
             is Album -> parent.getPagedTracks(sort, desc, Settings.includeMissing, onlyFavorites, loadSize, startposition)
@@ -143,8 +219,8 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
         
         val nativeTracks = nativeTracksArray.toMutableList()
 
-        // For Artist and Album views, include videos with matching metadata
-        if (parent is Artist || parent is Album) {
+        // For native Artist and Album views (positive IDs), include videos with matching metadata
+        if ((parent is Artist && parent.id > 0) || (parent is Album && parent.id > 0)) {
             val matchingVideos = getVideosMatchingParent()
             if (matchingVideos.isNotEmpty()) {
                 // Filter by search query if present
@@ -344,6 +420,31 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
                    else medialibrary.getAudioCount(model.filterQuery) + medialibrary.getVideoCount(model.filterQuery)
         }
         
+        // For VideoArtist and VideoAlbum (or artists/albums with negative IDs after unparceling)
+        val isVideoOnlyArtist = parent is VideoArtist || (parent is Artist && parent.id < 0)
+        val isVideoOnlyAlbum = parent is VideoAlbum || (parent is Album && parent.id < 0)
+        
+        if (isVideoOnlyArtist || isVideoOnlyAlbum) {
+            // Get stored videos if this is a VideoArtist/VideoAlbum instance
+            val storedVideos = when (parent) {
+                is VideoArtist -> parent.getVideos()
+                is VideoAlbum -> parent.getVideos()
+                else -> emptyList()
+            }
+            
+            // If we have stored videos, use them; otherwise load by name matching
+            val videos = if (storedVideos.isNotEmpty()) {
+                storedVideos
+            } else {
+                getVideosMatchingParent()
+            }
+            
+            return if (model.filterQuery != null) {
+                val query = model.filterQuery!!.lowercase()
+                videos.count { it.title.lowercase().contains(query) }
+            } else videos.size
+        }
+        
         val nativeCount = if (model.filterQuery == null) when (parent) {
             is Album -> parent.realTracksCount
             is Playlist -> parent.getRealTracksCount(Settings.includeMissing, onlyFavorites)
@@ -357,8 +458,8 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
             else -> medialibrary.getAudioCount(model.filterQuery)
         }
         
-        // Add matching videos count for Artist and Album views
-        if (parent is Artist || parent is Album) {
+        // Add matching videos count for native Artist and Album views (positive IDs)
+        if ((parent is Artist && parent.id > 0) || (parent is Album && parent.id > 0)) {
             val matchingVideosCount = getVideosMatchingParent().let { videos ->
                 if (model.filterQuery != null) {
                     val query = model.filterQuery!!.lowercase()
