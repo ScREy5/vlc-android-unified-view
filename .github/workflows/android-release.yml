@@ -10,9 +10,6 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
-
-    env:
-      KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -42,6 +39,7 @@ jobs:
       - name: Prepare release keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "ANDROID_KEYSTORE_BASE64 is not set"
@@ -53,6 +51,7 @@ jobs:
         env:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
         run: |
           gradle :application:app:assembleSignedRelease \
             -PkeyStoreFile="$KEYSTORE_FILE" \
