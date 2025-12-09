@@ -81,6 +81,40 @@ feature/
 - Run with: `gradle test` or `gradle connectedAndroidTest`
 - **Note:** Testing and building require a proper environment (Gradle 8.14.3, JDK 17, Android SDK). Use the provided Docker environment in `docker-build/` if local setup is missing.
 
+### Building with Docker (Recommended)
+A Docker-based build environment is provided to ensure consistent builds without local setup issues.
+
+**Quick Build:**
+```bash
+# Run the convenience script from project root
+chmod +x build_in_docker.sh && ./build_in_docker.sh
+```
+
+**Manual Docker Commands:**
+```bash
+# Start the build container
+cd docker-build
+docker-compose up -d
+
+# Run a debug build
+docker-compose exec vlc-builder gradle :application:app:assembleDebug
+
+# Run a signed release build (requires signing keys)
+docker-compose exec vlc-builder gradle :application:app:assembleSignedRelease
+
+# Access the container shell for other commands
+docker-compose exec vlc-builder bash
+
+# Stop the container when done
+docker-compose down
+```
+
+**Build Artifacts:**
+- Debug APK: `application/app/build/outputs/apk/debug/VLC-Android-*-debug-all.apk`
+- Signed APK: `application/app/build/outputs/apk/signedRelease/`
+
+**Note:** The Docker build uses the official VideoLAN Android build image, which includes all necessary dependencies (Android SDK, NDK, etc.).
+
 ## Files to Avoid Committing
 - `*.keystore` - Signing keys
 - `keystore-base64.txt` - Encoded keystore

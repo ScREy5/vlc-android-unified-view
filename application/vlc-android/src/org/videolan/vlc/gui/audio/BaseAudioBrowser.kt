@@ -115,6 +115,7 @@ import org.videolan.vlc.util.getScreenWidth
 import org.videolan.vlc.util.share
 import org.videolan.vlc.util.showParentFolder
 import org.videolan.vlc.viewmodels.MedialibraryViewModel
+import org.videolan.vlc.repository.VideoAudioMetadataRepository
 import java.security.SecureRandom
 import java.util.Arrays
 import kotlin.math.min
@@ -455,8 +456,18 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
         val flags: FlagSet<ContextOption> = when (item.itemType) {
             MediaLibraryItem.TYPE_MEDIA -> {
                 createCtxTrackFlags().apply {
-                    if ((item as? MediaWrapper)?.isFavorite == true) add(CTX_FAV_REMOVE) else add(CTX_FAV_ADD)
-                    if ((item as? MediaWrapper)?.artistId != (item as? MediaWrapper)?.albumArtistId) add(CTX_GO_TO_ALBUM_ARTIST)
+                    val mw = item as? MediaWrapper
+                    if (mw?.isFavorite == true) add(CTX_FAV_REMOVE) else add(CTX_FAV_ADD)
+                    if (mw?.artistId != mw?.albumArtistId) add(CTX_GO_TO_ALBUM_ARTIST)
+                    // For videos, we don't have native artist/album from medialibrary
+                    // The Go to Artist/Album options should only show if we have the data
+                    if (mw?.type == MediaWrapper.TYPE_VIDEO) {
+                        // Remove Go to Album/Artist by default for videos
+                        // They will only work if the video has audio metadata
+                        // which is not directly checkable here without async call
+                        remove(CTX_GO_TO_ALBUM)
+                        // Keep CTX_GO_TO_ARTIST - it will show a toast if no artist found
+                    }
                 }
             }
             MediaLibraryItem.TYPE_ARTIST -> {
@@ -530,7 +541,29 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
                 startActivity(i)
             }
             CTX_GO_TO_ARTIST -> lifecycleScope.launch(Dispatchers.IO) {
-                val artist = if (media is Album) media.retrieveAlbumArtist() else (media as MediaWrapper).artist
+                val artist = if (media is Album) {
+                    media.retrieveAlbumArtist()
+                } else {
+                    val mw = media as MediaWrapper
+                    // For videos, try to get artist from cached metadata
+                    if (mw.type == MediaWrapper.TYPE_VIDEO) {
+                        val cachedMetadata = VideoAudioMetadataRepository.getInstance(requireContext()).getByMediaId(mw.id)
+                        if (cachedMetadata != null && cachedMetadata.artist.isNotEmpty()) {
+                            // Search for the artist by name in the medialibrary
+                            val ml = org.videolan.medialibrary.interfaces.Medialibrary.getInstance()
+                            val artists = ml.searchArtist(cachedMetadata.artist)
+                            artists?.firstOrNull { it.title == cachedMetadata.artist }
+                        } else null
+                    } else {
+                        mw.artist
+                    }
+                }
+                if (artist == null) {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(requireContext(), R.string.unknown_artist, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
                 val i = Intent(requireActivity(), SecondaryActivity::class.java)
                 i.putExtra(SecondaryActivity.KEY_FRAGMENT, SecondaryActivity.ALBUMS_SONGS)
                 i.putExtra(AudioBrowserFragment.TAG_ITEM, artist)

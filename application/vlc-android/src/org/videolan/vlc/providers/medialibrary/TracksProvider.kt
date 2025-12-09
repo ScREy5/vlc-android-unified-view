@@ -33,6 +33,7 @@ import org.videolan.vlc.gui.helpers.MediaComparators
 import org.videolan.vlc.mediadb.models.VideoAudioMetadata
 import org.videolan.vlc.repository.VideoAudioMetadataRepository
 import org.videolan.vlc.util.VideoMetadataExtractor
+import org.videolan.vlc.util.buildAudioDescription
 import org.videolan.vlc.util.getEffectiveAlbum
 import org.videolan.vlc.util.getEffectiveArtist
 import org.videolan.vlc.viewmodels.SortableModel
@@ -127,9 +128,11 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
             else medialibrary.searchVideo(model.filterQuery, sort, desc, Settings.includeMissing, onlyFavorites, videoLimit, 0).asList()
         } else emptyList()
 
-        // Load cached metadata for videos
+        // Load cached metadata for videos and apply to descriptions
         if (video.isNotEmpty()) {
             loadVideoMetadataCache(video)
+            // Apply cached metadata to video descriptions for display
+            applyMetadataToVideoDescriptions(video)
             // Trigger background extraction for videos without cached metadata
             triggerMetadataExtraction(video)
         }
@@ -185,6 +188,22 @@ class TracksProvider(val parent : MediaLibraryItem?, context: Context, model: So
      */
     private fun getVideoMetadata(media: MediaWrapper): VideoAudioMetadata? {
         return if (media.type == MediaWrapper.TYPE_VIDEO) videoMetadataCache[media.id] else null
+    }
+
+    /**
+     * Apply cached audio metadata to video descriptions for display in the audio tab.
+     * This shows artist · album format like audio files instead of duration.
+     */
+    private fun applyMetadataToVideoDescriptions(videos: List<MediaWrapper>) {
+        for (video in videos) {
+            val metadata = videoMetadataCache[video.id]
+            if (metadata != null) {
+                val description = video.buildAudioDescription(metadata)
+                if (description.isNotEmpty()) {
+                    video.description = description
+                }
+            }
+        }
     }
 
     private fun getComparator(sort: Int): Comparator<MediaWrapper> = when (sort) {
