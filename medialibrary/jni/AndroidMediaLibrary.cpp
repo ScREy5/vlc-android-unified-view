@@ -55,8 +55,15 @@ medialibrary::InitializeResult
 AndroidMediaLibrary::initML()
 {
     auto result = p_ml->initialize(this);
-    if (result == medialibrary::InitializeResult::Success)
-        p_ml->forceParserRetry();
+    if (result == medialibrary::InitializeResult::Success && m_videoAsAudioRescanDone == false) {
+        /*
+         * Re-run a full scan so videos parsed as audio also populate music tables
+         * (albums/artists) while remaining videos. Parser retry alone only
+         * reprocesses failed items and doesn't inject the new audio metadata.
+         */
+        p_ml->forceRescan();
+        m_videoAsAudioRescanDone = true;
+    }
     return result;
 }
 

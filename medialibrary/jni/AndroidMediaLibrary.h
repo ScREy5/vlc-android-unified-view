@@ -217,5 +217,6 @@ private:
     std::shared_ptr<AndroidDeviceLister> p_lister;
     bool m_paused = false;
     uint32_t m_mediaAddedType = 0, m_mediaUpdatedType = 0;
+    bool m_videoAsAudioRescanDone = false;
 };
 #endif // ANDROIDMEDIALIBRARY_H
