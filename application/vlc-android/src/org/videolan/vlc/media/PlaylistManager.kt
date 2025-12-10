@@ -572,7 +572,9 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             determinePrevAndNextIndices()
             service.onNewPlayback()
         } else { //Start VideoPlayer for first video, it will trigger playIndex when ready.
-            if (player.isPlaying()) player.stop()
+            // Don't stop the player here - let VideoPlayerActivity handle the transition
+            // This keeps audio active during the transition to prevent issues
+            // with external audio effect apps like JamesDSP
             VideoPlayerActivity.startOpened(ctx, mw.uri, currentIndex)
         }
     }
