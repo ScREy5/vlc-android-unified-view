@@ -1099,14 +1099,18 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             playbackStarted = false
 
             handler.removeCallbacksAndMessages(null)
-            if (hasMedia() && switchingView) {
+            // If we're transitioning between media in a playlist (e.g., video to audio),
+            // don't stop - the new media is already playing
+            if (hasMedia() && (switchingView || playlistManager.transitioningMedia)) {
                 if (BuildConfig.DEBUG) Log.d(TAG, "mLocation = \"$videoUri\"")
                 if (switchToPopup)
                     switchToPopup(currentMediaPosition)
                 else {
                     mediaplayer.detachViews()
-                    currentMediaWrapper?.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
-                    showWithoutParse(currentMediaPosition)
+                    if (!playlistManager.transitioningMedia) {
+                        currentMediaWrapper?.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
+                        showWithoutParse(currentMediaPosition)
+                    }
                 }
                 return
             }
