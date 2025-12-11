@@ -334,6 +334,9 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 if (!wakeLock.isHeld) wakeLock.acquire()
                 showNotification()
                 nbErrors = 0
+                // Always send session open to help external audio effect apps
+                // reconnect after media transitions
+                sendStartSessionIdIntent()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     NetworkConnectionManager.isMetered.value?.let {
                         checkMetered(it)
