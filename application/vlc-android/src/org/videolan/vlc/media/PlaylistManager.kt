@@ -194,6 +194,14 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         transitioningToVideo = false
         transitioningMedia = false
     }
+    
+    /**
+     * Set the transitioningMedia flag.
+     * Used to prevent audio session close during media transitions.
+     */
+    fun setTransitioningMedia(value: Boolean) {
+        transitioningMedia = value
+    }
     fun canRepeat() = mediaList.size() > 0
 
     fun hasPlaylist() = mediaList.size() > 1
