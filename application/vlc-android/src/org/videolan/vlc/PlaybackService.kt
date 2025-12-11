@@ -372,7 +372,12 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 /* CbAction notification content intent: resume video or resume audio activity */
                 updateMetadata()
             }
-            MediaPlayer.Event.MediaChanged -> if (BuildConfig.DEBUG) Log.d(TAG, "onEvent: MediaChanged")
+            MediaPlayer.Event.MediaChanged -> {
+                if (BuildConfig.DEBUG) Log.d(TAG, "onEvent: MediaChanged")
+                // Send session open intent when media changes to help external audio effect apps
+                // maintain connection during transitions
+                sendStartSessionIdIntent()
+            }
             MediaPlayer.Event.EndReached -> {
                 mediaEndReached = true
                 playQueueFinished = !playlistManager.hasNext() || playlistManager.stopAfter == currentMediaPosition
