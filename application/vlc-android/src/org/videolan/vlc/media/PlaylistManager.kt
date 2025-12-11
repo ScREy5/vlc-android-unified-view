@@ -157,6 +157,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     @Volatile
     private var expanding = false
     private var entryUrl : String? = null
+    /**
+     * Flag indicating we're transitioning to video playback.
+     * Used to prevent closing the audio session during the transition.
+     */
+    @Volatile
+    var transitioningToVideo = false
+        private set
     val abRepeat by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<ABRepeat>().apply { value = ABRepeat() } }
     val abRepeatOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
     val videoStatsOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
@@ -170,7 +177,14 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     lateinit var audioResumeStatus: ResumeStatus
 
     fun hasCurrentMedia() = isValidPosition(currentIndex)
-
+    
+    /**
+     * Clear the video transition flag.
+     * Called when playback starts successfully.
+     */
+    fun clearVideoTransition() {
+        transitioningToVideo = false
+    }
     fun canRepeat() = mediaList.size() > 0
 
     fun hasPlaylist() = mediaList.size() > 1
@@ -572,9 +586,9 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             determinePrevAndNextIndices()
             service.onNewPlayback()
         } else { //Start VideoPlayer for first video, it will trigger playIndex when ready.
-            // Don't stop the player here - let VideoPlayerActivity handle the transition
-            // This keeps audio active during the transition to prevent issues
-            // with external audio effect apps like JamesDSP
+            // Set flag before stopping to prevent audio session close
+            transitioningToVideo = true
+            if (player.isPlaying()) player.stop()
             VideoPlayerActivity.startOpened(ctx, mw.uri, currentIndex)
         }
     }
