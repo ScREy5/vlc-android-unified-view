@@ -328,10 +328,12 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
             .setCancelable(true)
             .setPositiveButton(R.string.resume) { _, _ ->
                 if (resumeAllCheck.isChecked) PlaybackService.instance?.playlistManager?.audioResumeStatus = ResumeStatus.ALWAYS
+                PlaybackService.instance?.playlistManager?.setTransitioningMedia(true)
                 lifecycleScope.launch { PlaybackService.instance?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceResume = true) }
             }
             .setNegativeButton(R.string.no) { _, _ ->
                 if (resumeAllCheck.isChecked) PlaybackService.instance?.playlistManager?.audioResumeStatus = ResumeStatus.NEVER
+                PlaybackService.instance?.playlistManager?.setTransitioningMedia(true)
                 lifecycleScope.launch { PlaybackService.instance?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceRestart = true) }
             }
             .setOnDismissListener {

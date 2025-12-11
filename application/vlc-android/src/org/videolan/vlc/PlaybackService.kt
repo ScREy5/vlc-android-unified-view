@@ -1669,6 +1669,8 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      */
     @JvmOverloads
     fun playIndex(index: Int, flags: Int = 0) {
+        // Set transition flag to prevent audio session close during media transition
+        playlistManager.setTransitioningMedia(true)
         lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { playlistManager.playIndex(index, flags) }
     }
 

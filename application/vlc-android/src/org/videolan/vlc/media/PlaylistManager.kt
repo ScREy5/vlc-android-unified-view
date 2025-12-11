@@ -672,7 +672,10 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             if (currentRemoved && !expanding) {
                 when {
                     nextIndex != -1 -> next()
-                    currentIndex != -1 -> playIndex(currentIndex, 0)
+                    currentIndex != -1 -> {
+                        transitioningMedia = true
+                        playIndex(currentIndex, 0)
+                    }
                     else -> stop()
                 }
             }

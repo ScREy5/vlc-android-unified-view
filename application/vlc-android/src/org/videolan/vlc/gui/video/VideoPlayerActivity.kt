@@ -1099,19 +1099,23 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             playbackStarted = false
 
             handler.removeCallbacksAndMessages(null)
-            // If we're transitioning between media in a playlist (e.g., video to audio),
-            // don't stop - the new media is already playing
-            if (hasMedia() && (switchingView || playlistManager.transitioningMedia)) {
+            if (hasMedia() && switchingView) {
                 if (BuildConfig.DEBUG) Log.d(TAG, "mLocation = \"$videoUri\"")
                 if (switchToPopup)
                     switchToPopup(currentMediaPosition)
                 else {
                     mediaplayer.detachViews()
-                    if (!playlistManager.transitioningMedia) {
-                        currentMediaWrapper?.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
-                        showWithoutParse(currentMediaPosition)
-                    }
+                    currentMediaWrapper?.addFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
+                    showWithoutParse(currentMediaPosition)
                 }
+                return
+            }
+            
+            // If we're transitioning between media in a playlist (e.g., video to audio),
+            // don't stop - the new media is already playing or about to play
+            if (hasMedia() && playlistManager.transitioningMedia) {
+                if (BuildConfig.DEBUG) Log.d(TAG, "Skipping stop - transitioning media in playlist")
+                mediaplayer.detachViews()
                 return
             }
 
@@ -2392,6 +2396,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private fun showConfirmResumeDialog(confirmation: WaitConfirmation) {
         if (isFinishing) return
         if (isInPictureInPictureMode) {
+            service?.playlistManager?.setTransitioningMedia(true)
             lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceResume = true) }
             return
         }
@@ -2405,10 +2410,12 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 .setView(dialogView)
                 .setPositiveButton(R.string.resume) { _, _ ->
                     if (resumeAllCheck.isChecked) service?.playlistManager?.videoResumeStatus = ResumeStatus.ALWAYS
+                    service?.playlistManager?.setTransitioningMedia(true)
                     lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceResume = true) }
                 }
                 .setNegativeButton(R.string.no) { _, _ ->
                     if (resumeAllCheck.isChecked) service?.playlistManager?.videoResumeStatus = ResumeStatus.NEVER
+                    service?.playlistManager?.setTransitioningMedia(true)
                     lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceRestart = true) }
                 }
                 .setOnDismissListener {
