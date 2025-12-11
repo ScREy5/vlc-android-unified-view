@@ -164,6 +164,14 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     @Volatile
     var transitioningToVideo = false
         private set
+    
+    /**
+     * Flag indicating we're transitioning between media items in a playlist.
+     * Used to prevent closing the audio session during any playlist transition.
+     */
+    @Volatile
+    var transitioningMedia = false
+        private set
     val abRepeat by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<ABRepeat>().apply { value = ABRepeat() } }
     val abRepeatOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
     val videoStatsOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
@@ -179,11 +187,12 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     fun hasCurrentMedia() = isValidPosition(currentIndex)
     
     /**
-     * Clear the video transition flag.
+     * Clear the transition flags.
      * Called when playback starts successfully.
      */
-    fun clearVideoTransition() {
+    fun clearTransitionFlags() {
         transitioningToVideo = false
+        transitioningMedia = false
     }
     fun canRepeat() = mediaList.size() > 0
 
@@ -391,6 +400,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             videoBackground = videoBackground || (!player.isVideoPlaying() && player.canSwitchToVideo())
         }
+        // Set transition flag to prevent audio session close during playlist transition
+        transitioningMedia = true
         launch { playIndex(currentIndex) }
     }
 
@@ -447,6 +458,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 player.stop()
                 return
             }
+            // Set transition flag to prevent audio session close during playlist transition
+            transitioningMedia = true
             launch { playIndex(currentIndex) }
             lastPrevious = -1L
         } else {

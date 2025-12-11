@@ -326,8 +326,8 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         when (event.type) {
             MediaPlayer.Event.Playing -> {
                 if (BuildConfig.DEBUG) Log.i(TAG, "MediaPlayer.Event.Playing")
-                // Clear the video transition flag - playback has started successfully
-                playlistManager.clearVideoTransition()
+                // Clear the transition flags - playback has started successfully
+                playlistManager.clearTransitionFlags()
                 executeUpdate(true)
                 lastTime = getTime()
                 audioFocusHelper.changeAudioFocus(true)
@@ -976,9 +976,9 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         val sessionId = VLCOptions.audiotrackSessionId
         if (sessionId == 0) return
         
-        // Don't close the session if we're transitioning to video playback
+        // Don't close the session if we're transitioning between media
         // This prevents audio effect apps like JamesDSP from losing the session
-        if (playlistManager.transitioningToVideo) {
+        if (playlistManager.transitioningToVideo || playlistManager.transitioningMedia) {
             return
         }
 
