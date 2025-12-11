@@ -1671,6 +1671,8 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     fun playIndex(index: Int, flags: Int = 0) {
         // Set transition flag to prevent audio session close during media transition
         playlistManager.setTransitioningMedia(true)
+        // Pre-send session open to help external audio effect apps stay connected during transition
+        sendStartSessionIdIntent()
         lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { playlistManager.playIndex(index, flags) }
     }
 
