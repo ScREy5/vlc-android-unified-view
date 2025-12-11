@@ -157,6 +157,21 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     @Volatile
     private var expanding = false
     private var entryUrl : String? = null
+    /**
+     * Flag indicating we're transitioning to video playback.
+     * Used to prevent closing the audio session during the transition.
+     */
+    @Volatile
+    var transitioningToVideo = false
+        private set
+    
+    /**
+     * Flag indicating we're transitioning between media items in a playlist.
+     * Used to prevent closing the audio session during any playlist transition.
+     */
+    @Volatile
+    var transitioningMedia = false
+        private set
     val abRepeat by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<ABRepeat>().apply { value = ABRepeat() } }
     val abRepeatOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
     val videoStatsOn by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Boolean>().apply { value = false } }
@@ -170,7 +185,23 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     lateinit var audioResumeStatus: ResumeStatus
 
     fun hasCurrentMedia() = isValidPosition(currentIndex)
-
+    
+    /**
+     * Clear the transition flags.
+     * Called when playback starts successfully.
+     */
+    fun clearTransitionFlags() {
+        transitioningToVideo = false
+        transitioningMedia = false
+    }
+    
+    /**
+     * Set the transitioningMedia flag.
+     * Used to prevent audio session close during media transitions.
+     */
+    fun setTransitioningMedia(value: Boolean) {
+        transitioningMedia = value
+    }
     fun canRepeat() = mediaList.size() > 0
 
     fun hasPlaylist() = mediaList.size() > 1
@@ -377,6 +408,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             videoBackground = videoBackground || (!player.isVideoPlaying() && player.canSwitchToVideo())
         }
+        // Set transition flag to prevent audio session close during playlist transition
+        transitioningMedia = true
         launch { playIndex(currentIndex) }
     }
 
@@ -433,6 +466,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 player.stop()
                 return
             }
+            // Set transition flag to prevent audio session close during playlist transition
+            transitioningMedia = true
             launch { playIndex(currentIndex) }
             lastPrevious = -1L
         } else {
@@ -572,6 +607,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             determinePrevAndNextIndices()
             service.onNewPlayback()
         } else { //Start VideoPlayer for first video, it will trigger playIndex when ready.
+            // Set flag before stopping to prevent audio session close
+            transitioningToVideo = true
             if (player.isPlaying()) player.stop()
             VideoPlayerActivity.startOpened(ctx, mw.uri, currentIndex)
         }
@@ -643,7 +680,10 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             if (currentRemoved && !expanding) {
                 when {
                     nextIndex != -1 -> next()
-                    currentIndex != -1 -> playIndex(currentIndex, 0)
+                    currentIndex != -1 -> {
+                        transitioningMedia = true
+                        playIndex(currentIndex, 0)
+                    }
                     else -> stop()
                 }
             }

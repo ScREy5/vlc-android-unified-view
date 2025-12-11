@@ -326,12 +326,23 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         when (event.type) {
             MediaPlayer.Event.Playing -> {
                 if (BuildConfig.DEBUG) Log.i(TAG, "MediaPlayer.Event.Playing")
+                // Clear the transition flags - playback has started successfully
+                playlistManager.clearTransitionFlags()
                 executeUpdate(true)
                 lastTime = getTime()
                 audioFocusHelper.changeAudioFocus(true)
                 if (!wakeLock.isHeld) wakeLock.acquire()
                 showNotification()
                 nbErrors = 0
+                // Always send session open to help external audio effect apps
+                // reconnect after media transitions
+                sendStartSessionIdIntent()
+                // Send again after a short delay to ensure external effects reconnect
+                // after the audio output is fully initialized
+                lifecycleScope.launch {
+                    delay(250)
+                    sendStartSessionIdIntent()
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     NetworkConnectionManager.isMetered.value?.let {
                         checkMetered(it)
@@ -367,7 +378,12 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 /* CbAction notification content intent: resume video or resume audio activity */
                 updateMetadata()
             }
-            MediaPlayer.Event.MediaChanged -> if (BuildConfig.DEBUG) Log.d(TAG, "onEvent: MediaChanged")
+            MediaPlayer.Event.MediaChanged -> {
+                if (BuildConfig.DEBUG) Log.d(TAG, "onEvent: MediaChanged")
+                // Send session open intent when media changes to help external audio effect apps
+                // maintain connection during transitions
+                sendStartSessionIdIntent()
+            }
             MediaPlayer.Event.EndReached -> {
                 mediaEndReached = true
                 playQueueFinished = !playlistManager.hasNext() || playlistManager.stopAfter == currentMediaPosition
@@ -970,6 +986,12 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     private fun sendStopSessionIdIntent() {
         val sessionId = VLCOptions.audiotrackSessionId
         if (sessionId == 0) return
+        
+        // Don't close the session if we're transitioning between media
+        // This prevents audio effect apps like JamesDSP from losing the session
+        if (playlistManager.transitioningToVideo || playlistManager.transitioningMedia) {
+            return
+        }
 
         val intent = Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
         intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
@@ -1658,6 +1680,10 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      */
     @JvmOverloads
     fun playIndex(index: Int, flags: Int = 0) {
+        // Set transition flag to prevent audio session close during media transition
+        playlistManager.setTransitioningMedia(true)
+        // Pre-send session open to help external audio effect apps stay connected during transition
+        sendStartSessionIdIntent()
         lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { playlistManager.playIndex(index, flags) }
     }
 

@@ -1110,6 +1110,14 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 }
                 return
             }
+            
+            // If we're transitioning between media in a playlist (e.g., video to audio),
+            // don't stop - the new media is already playing or about to play
+            if (hasMedia() && playlistManager.transitioningMedia) {
+                if (BuildConfig.DEBUG) Log.d(TAG, "Skipping stop - transitioning media in playlist")
+                mediaplayer.detachViews()
+                return
+            }
 
             if (isSeekable) {
                 savedTime = time
@@ -2388,6 +2396,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private fun showConfirmResumeDialog(confirmation: WaitConfirmation) {
         if (isFinishing) return
         if (isInPictureInPictureMode) {
+            service?.playlistManager?.setTransitioningMedia(true)
             lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceResume = true) }
             return
         }
@@ -2401,10 +2410,12 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 .setView(dialogView)
                 .setPositiveButton(R.string.resume) { _, _ ->
                     if (resumeAllCheck.isChecked) service?.playlistManager?.videoResumeStatus = ResumeStatus.ALWAYS
+                    service?.playlistManager?.setTransitioningMedia(true)
                     lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceResume = true) }
                 }
                 .setNegativeButton(R.string.no) { _, _ ->
                     if (resumeAllCheck.isChecked) service?.playlistManager?.videoResumeStatus = ResumeStatus.NEVER
+                    service?.playlistManager?.setTransitioningMedia(true)
                     lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceRestart = true) }
                 }
                 .setOnDismissListener {
