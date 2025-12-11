@@ -337,6 +337,12 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 // Always send session open to help external audio effect apps
                 // reconnect after media transitions
                 sendStartSessionIdIntent()
+                // Send again after a short delay to ensure external effects reconnect
+                // after the audio output is fully initialized
+                lifecycleScope.launch {
+                    delay(250)
+                    sendStartSessionIdIntent()
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     NetworkConnectionManager.isMetered.value?.let {
                         checkMetered(it)
