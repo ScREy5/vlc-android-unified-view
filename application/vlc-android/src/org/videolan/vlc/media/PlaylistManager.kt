@@ -280,7 +280,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             currentlyPlayingMedia.uri == requestedMedia.uri &&
             player.isPlaying()) {
             Log.d(TAG, "load(): Same media at same position clicked while playing, seeking to start")
-            player.seek(0)
+            player.setPosition(0F)
             if (!player.isPlaying()) player.play()
             return
         }
@@ -549,7 +549,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             !forceRestart) {
             // Same media, just seek to start and resume
             Log.d(TAG, "Same media clicked while playing, seeking to start instead of reloading")
-            player.seek(0)
+            player.setPosition(0F)
             if (!player.isPlaying()) player.play()
             currentIndex = index
             determinePrevAndNextIndices()
