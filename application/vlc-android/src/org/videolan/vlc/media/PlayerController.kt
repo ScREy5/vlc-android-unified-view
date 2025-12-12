@@ -87,7 +87,8 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         // Note: RootlessJamesDSP uses DynamicsProcessing to mute VLC's audio and captures it
         // via MediaProjection. When VLC restarts, we need to give JDSP time to re-establish
         // its capture/playback chain.
-        val wasPlaying = mediaplayer.isPlaying || mediaplayer.hasMedia()
+        // Only delay if the player was ACTIVELY playing (not just having media from previous session)
+        val wasPlaying = mediaplayer.isPlaying
         if (wasPlaying && !mediaplayer.isReleased) {
             mediaplayer.stop()
             // Longer delay to let audio subsystem and external DSP apps stabilize
@@ -105,9 +106,6 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
             }
             mediaplayer.setVideoTitleDisplay(MediaPlayer.Position.Disable, 0)
             mediaplayer.play()
-            // Give the audio output time to fully initialize before returning
-            // This helps external audio capture apps like RootlessJamesDSP attach properly
-            delay(50)
         }
     }
 
