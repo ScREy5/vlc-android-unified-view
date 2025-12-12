@@ -81,6 +81,16 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         mediaplayerEventListener = listener
         resetPlaybackState(time, media.duration)
         mediaplayer.setEventListener(null)
+        
+        // If player is currently playing, stop it first and give audio system time to reset
+        // This helps external audio effect apps like RootlessJamesDSP maintain their connection
+        val wasPlaying = mediaplayer.isPlaying
+        if (wasPlaying && !mediaplayer.isReleased) {
+            mediaplayer.stop()
+            // Small delay to let audio subsystem stabilize before starting new playback
+            delay(50)
+        }
+        
         withContext(Dispatchers.IO) { if (!mediaplayer.isReleased) mediaplayer.media = media.apply { if (hasRenderer) parse() } }
         mediaplayer.setEventListener(this@PlayerController)
         if (!mediaplayer.isReleased) {

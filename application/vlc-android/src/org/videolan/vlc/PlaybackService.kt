@@ -337,9 +337,15 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 // Always send session open to help external audio effect apps
                 // reconnect after media transitions
                 sendStartSessionIdIntent()
-                // Send again after a short delay to ensure external effects reconnect
-                // after the audio output is fully initialized
+                // Send multiple delayed broadcasts with staggered timing to ensure
+                // external effects like RootlessJamesDSP reconnect after audio output
+                // is fully initialized. This is especially important during rapid
+                // media restarts (e.g., clicking on same song again).
                 lifecycleScope.launch {
+                    delay(100)
+                    sendStartSessionIdIntent()
+                    delay(150)
+                    sendStartSessionIdIntent()
                     delay(250)
                     sendStartSessionIdIntent()
                 }

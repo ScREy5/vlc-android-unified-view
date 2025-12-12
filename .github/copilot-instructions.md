@@ -6,7 +6,63 @@ applyTo: '**'
 
 ## Project Context
 This is the VLC for Android repository - the official Android port of VLC media player.
-The current branch is `codex/add-audio-metadata-recognition-for-videos`, which suggests work on audio metadata recognition for video files.
+The current branch is `dsp-new-fix`, which is focused on DSP audio processing integration.
+
+## RootlessJamesDSP Integration Reference
+
+This project aims to work compatibly with **RootlessJamesDSP** - a system-wide JamesDSP audio processing engine for non-rooted Android devices.
+
+**Repository:** https://github.com/timschneeb/RootlessJamesDSP
+
+### How RootlessJamesDSP Works
+
+RootlessJamesDSP uses Android's internal audio capture (MediaProjection API) to intercept and process audio streams. Unlike traditional audio effect apps that rely on Android's built-in `AudioEffect` API, RootlessJamesDSP gains full access to audio streams for custom DSP processing.
+
+### Key Integration Points
+
+1. **Audio Session Broadcasts:**
+   - RootlessJamesDSP listens for `AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION` and `AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION`
+   - VLC should broadcast these intents with:
+     - `AudioEffect.EXTRA_AUDIO_SESSION` - The audio session ID
+     - `AudioEffect.EXTRA_PACKAGE_NAME` - The package name ("org.videolan.vlc")
+
+2. **Compatibility Requirements:**
+   - Apps must NOT block internal audio capture (no `ALLOW_CAPTURE_BY_NONE` flag)
+   - Apps should use standard Android audio playback APIs (not AAudio native C++ API exclusively)
+   - VLC uses LibVLC which should be compatible since it outputs through Android's audio system
+
+3. **RootlessJamesDSP Modes:**
+   - **Rootless Mode:** Uses MediaProjection to capture system audio (Android 10+, requires Shizuku/ADB)
+   - **Root Mode:** Uses AudioEffect framework directly with Magisk module
+   - VLC should work with both modes if audio session intents are properly broadcast
+
+4. **Apps Confirmed Working with RootlessJamesDSP:**
+   - YouTube, YouTube Music, Amazon Music, Deezer, Poweramp, Twitch
+   - VLC should follow similar patterns to ensure compatibility
+
+### When Modifying Audio Playback
+
+Ensure any audio playback changes:
+1. Properly acquire and release audio sessions
+2. Broadcast audio session open/close intents
+3. Don't set audio capture restriction flags that would block RootlessJamesDSP
+4. Use Android's standard audio APIs rather than bypassing them
+
+### JamesDSP Audio Effects Supported
+
+- Limiter control
+- Output gain control  
+- Dynamic range compressor
+- Bass boost
+- FIR equalizer
+- Graphic EQ (Arbitrary response equalizer)
+- ViPER-DDC
+- Convolver (impulse response)
+- Live-programmable DSP (scripting engine)
+- Analog modeling
+- Soundstage widener
+- Crossfeed
+- Virtual room reverb
 
 ## Repository Structure Quick Reference
 
@@ -151,6 +207,25 @@ when (media.type) {
 - VLC3 (default): minSdk 17, libvlcVersion '3.6.5'
 - VLC4: minSdk 21, libvlcVersion '4.0.0-eap23'
 - Use `forceVlc4=true` gradle property to switch
+
+## Audio Session Management for DSP Compatibility
+
+When working with audio playback, ensure proper audio session handling for external DSP apps like RootlessJamesDSP:
+
+```kotlin
+// When starting playback - broadcast session open
+val intent = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, audioSessionId)
+intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+intent.putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioManager.STREAM_MUSIC)
+context.sendBroadcast(intent)
+
+// When stopping playback - broadcast session close
+val closeIntent = Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
+closeIntent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, audioSessionId)
+closeIntent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+context.sendBroadcast(closeIntent)
+```
 
 ## Reference Documentation
 See `CODEBASE_OVERVIEW.md` for comprehensive module documentation.
