@@ -1014,15 +1014,25 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
         }
 
         override fun onTouchClick() {
-            val activity = activity as AudioPlayerContainerActivity
-            activity.slideUpOrDownAudioPlayer()
+            // If video is playing as audio, short tap returns to video
+            // Otherwise, short tap expands/collapses the audio player
+            if (playlistModel.videoTrackCount > 0) {
+                onResumeToVideoClick()
+            } else {
+                val activity = activity as AudioPlayerContainerActivity
+                activity.slideUpOrDownAudioPlayer()
+            }
         }
 
         override fun onTouchLongClick() {
             val trackInfo = playlistModel.title ?: return
 
-            if (playlistModel.videoTrackCount > 0) onResumeToVideoClick()
-            else {
+            // If video is playing as audio, long tap expands/collapses the audio player
+            // Otherwise, long tap copies track info (for audio-only content)
+            if (playlistModel.videoTrackCount > 0) {
+                val activity = activity as AudioPlayerContainerActivity
+                activity.slideUpOrDownAudioPlayer()
+            } else {
                 requireActivity().copy("VLC - song name", trackInfo)
                 UiTools.snacker(requireActivity(), R.string.track_info_copied_to_clipboard)
             }

@@ -680,7 +680,13 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 } else if ((AndroidDevices.isAndroidTv || isTalkbackIsEnabled()) && isShowing && !isLocked) {
                     overlayDelegate.hideOverlay(true)
                 } else {
-                    exitOK()
+                    // If video background playback is enabled, switch to audio mode instead of exiting
+                    val videoBackgroundMode = settings.getString(KEY_VIDEO_APP_SWITCH, "0")
+                    if (videoBackgroundMode == "1" && service?.isPlaying == true && !PlaybackService.hasRenderer()) {
+                        switchToAudioMode(true)
+                    } else {
+                        exitOK()
+                    }
                 }
             }
         })
