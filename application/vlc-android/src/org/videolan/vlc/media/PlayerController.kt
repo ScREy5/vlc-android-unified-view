@@ -81,6 +81,23 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         mediaplayerEventListener = listener
         resetPlaybackState(time, media.duration)
         mediaplayer.setEventListener(null)
+        
+        // If player has media loaded (playing or paused), stop it first and give audio system time to reset
+        // This helps external audio effect apps like RootlessJamesDSP maintain their connection
+        // Note: RootlessJamesDSP uses DynamicsProcessing to mute VLC's audio and captures it
+        // via MediaProjection. When VLC restarts, we need to give JDSP time to re-establish
+        // its capture/playback chain.
+        // Check hasMedia() to handle both playing AND paused states - paused media still has
+        // an active audio session that needs proper cleanup before switching.
+        val hasActiveMedia = !mediaplayer.isReleased && mediaplayer.hasMedia()
+        if (hasActiveMedia) {
+            mediaplayer.stop()
+            // Longer delay to let audio subsystem and external DSP apps stabilize
+            // before starting new playback. This is especially important for apps
+            // like RootlessJamesDSP that need to re-establish their audio capture.
+            delay(300)
+        }
+        
         withContext(Dispatchers.IO) { if (!mediaplayer.isReleased) mediaplayer.media = media.apply { if (hasRenderer) parse() } }
         mediaplayer.setEventListener(this@PlayerController)
         if (!mediaplayer.isReleased) {
