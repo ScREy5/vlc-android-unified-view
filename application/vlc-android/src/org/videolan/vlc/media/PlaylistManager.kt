@@ -538,24 +538,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             return
         }
         
-        // Check if we're clicking the same song that's already playing
-        // If so, just seek to beginning instead of reloading - this avoids
-        // breaking external audio effects like RootlessJamesDSP
-        val requestedMedia = mediaList.getMedia(index)
-        val currentMedia = getCurrentMedia()
-        if (requestedMedia != null && currentMedia != null && 
-            requestedMedia.uri == currentMedia.uri && 
-            player.isPlaying() && 
-            !forceRestart) {
-            // Same media, just seek to start and resume
-            Log.d(TAG, "Same media clicked while playing, seeking to start instead of reloading")
-            player.setPosition(0F)
-            if (!player.isPlaying()) player.play()
-            currentIndex = index
-            determinePrevAndNextIndices()
-            return
-        }
-        
         currentIndex = if (isValidPosition(index)) {
             index
         } else {
