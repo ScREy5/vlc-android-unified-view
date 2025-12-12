@@ -148,6 +148,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         }
     var videoBackground = false
         private set
+    // Flag to indicate a fresh playlist load - prevents inheriting videoBackground from old media
+    private var freshPlaylistLoad = false
     var isBenchmark = false
     var isHardware = false
     private var parsed = false
@@ -290,6 +292,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         mediaList.removeEventListener(this@PlaylistManager)
         previous.clear()
         videoBackground = false
+        // Reset playingAsAudio flag when loading new playlist
+        // This ensures new videos start as videos, not in audio mode
+        playingAsAudio = false
+        // Mark this as a fresh playlist load to prevent inheriting old player state
+        freshPlaylistLoad = true
         if (BuildConfig.BETA) {
             Log.d(TAG, "load with values: ", Exception("Call stack"))
             list.forEach {
@@ -532,7 +539,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     suspend fun playIndex(index: Int, flags: Int = 0, forceResume:Boolean = false, forceRestart:Boolean = false) {
-        videoBackground = videoBackground || (!player.isVideoPlaying() && player.canSwitchToVideo())
+        // Only inherit videoBackground from old player state if this is NOT a fresh playlist load
+        // This prevents new videos from starting in audio mode when clicked while another video is playing as audio
+        if (!freshPlaylistLoad) {
+            videoBackground = videoBackground || (!player.isVideoPlaying() && player.canSwitchToVideo())
+        }
+        freshPlaylistLoad = false  // Reset the flag after checking
+        
         if (mediaList.size() == 0) {
             Log.w(TAG, "Warning: empty media list, nothing to play !")
             return
