@@ -84,11 +84,16 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         
         // If player is currently playing, stop it first and give audio system time to reset
         // This helps external audio effect apps like RootlessJamesDSP maintain their connection
-        val wasPlaying = mediaplayer.isPlaying
+        // Note: RootlessJamesDSP uses DynamicsProcessing to mute VLC's audio and captures it
+        // via MediaProjection. When VLC restarts, we need to give JDSP time to re-establish
+        // its capture/playback chain.
+        val wasPlaying = mediaplayer.isPlaying || mediaplayer.hasMedia()
         if (wasPlaying && !mediaplayer.isReleased) {
             mediaplayer.stop()
-            // Small delay to let audio subsystem stabilize before starting new playback
-            delay(50)
+            // Longer delay to let audio subsystem and external DSP apps stabilize
+            // before starting new playback. This is especially important for apps
+            // like RootlessJamesDSP that need to re-establish their audio capture.
+            delay(300)
         }
         
         withContext(Dispatchers.IO) { if (!mediaplayer.isReleased) mediaplayer.media = media.apply { if (hasRenderer) parse() } }
@@ -100,6 +105,9 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
             }
             mediaplayer.setVideoTitleDisplay(MediaPlayer.Position.Disable, 0)
             mediaplayer.play()
+            // Give the audio output time to fully initialize before returning
+            // This helps external audio capture apps like RootlessJamesDSP attach properly
+            delay(50)
         }
     }
 
